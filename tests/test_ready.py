@@ -2,6 +2,7 @@ from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
+from structlog.testing import capture_logs
 
 from app.core.db import DbCheck, get_db_check
 from app.main import app
@@ -29,13 +30,15 @@ def test_ready_ok() -> None:
     assert response.json() == {"status": "ok"}
 
 
-def test_ready_503_hides_error_details(caplog: pytest.LogCaptureFixture) -> None:
+def test_ready_503_hides_error_details() -> None:
     async def fail() -> None:
         raise RuntimeError("postgresql+asyncpg://u:s3cret@db:5432/x")
 
     _override(fail)
-    response = client.get("/health/ready")
+    with capture_logs() as logs:
+        response = client.get("/health/ready")
     assert response.status_code == 503
     assert response.json() == {"status": "unavailable"}
     assert "s3cret" not in response.text
-    assert "s3cret" not in caplog.text
+    assert any(e["event"] == "readiness_check_failed" for e in logs)
+    assert "s3cret" not in str(logs)
