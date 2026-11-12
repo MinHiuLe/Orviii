@@ -7,7 +7,7 @@ COPY pyproject.toml ./
 COPY app ./app
 RUN pip install --no-cache-dir .
 
-# ---- runtime stage: only the venv, non-root user ----
+# ---- runtime stage: venv + migrations only, non-root user ----
 FROM python:3.12-slim
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
@@ -15,6 +15,8 @@ ENV PATH="/opt/venv/bin:$PATH" \
 RUN useradd --system --uid 10001 --no-create-home app
 COPY --from=build /opt/venv /opt/venv
 WORKDIR /app
+COPY alembic.ini ./
+COPY migrations ./migrations
 USER app
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

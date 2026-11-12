@@ -6,6 +6,9 @@ dependencies = [
     "fastapi",
     "uvicorn",
     "pydantic-settings",
+    "sqlalchemy[asyncio]",
+    "asyncpg",
+    "alembic",
 ]
 
 [project.optional-dependencies]
