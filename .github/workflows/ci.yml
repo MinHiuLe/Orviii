@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e ".[dev]"
+      - run: make lint
+      - run: make typecheck
+      - run: make test
+
+  migrations:
+    runs-on: ubuntu-latest
+    env:
+      # Throwaway values for the CI-only database container, not real secrets.
+      DATABASE_URL: postgresql+asyncpg://ci:ci-password@localhost:5432/ci
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci-password
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e .
+      - run: alembic upgrade head
+      - name: Check DB is at head
+        run: alembic current | tee /dev/stderr | grep "(head)"
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: docker build -t orviii:ci .
+      - name: Image must not run as root
+        run: |
+          uid=$(docker run --rm --entrypoint id orviii:ci -u)
+          echo "uid=$uid"
+          test "$uid" != "0"
